@@ -93,10 +93,14 @@ Make sure you have the proper permission to the registry if the above commands d
 
 **Install the `VerticalPodAutoscaler` operator**
 
+```sh
+make install-vpa-operator
+```
+
 **Install the CRDs into the cluster:**
 
 ```sh
-make install-vpa-operator
+make install
 ```
 
 **Deploy the Manager to the cluster with the image specified by `IMG`:**

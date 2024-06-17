@@ -147,8 +147,8 @@ func (r *DynamicVerticalPodAutoscalerReconciler) Reconcile(ctx context.Context, 
 	wantVpaSpec := makeVpaSpec(&obj, &matchedPolicy.VpaSpec)
 
 	// Get or create the VPA object
-	found := &vpa.VerticalPodAutoscaler{}
-	if err := r.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, found); err != nil {
+	foundVPA := &vpa.VerticalPodAutoscaler{}
+	if err := r.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, foundVPA); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, err
 		}
@@ -178,12 +178,12 @@ func (r *DynamicVerticalPodAutoscalerReconciler) Reconcile(ctx context.Context, 
 
 	} else {
 		logger.V(5).Info("Found existing VerticalPodAutoscaler")
-		if err := controllerutil.SetControllerReference(&obj, found, r.Scheme); err != nil {
+		if err := controllerutil.SetControllerReference(&obj, foundVPA, r.Scheme); err != nil {
 			return ctrl.Result{}, err
 		}
-		if !reflect.DeepEqual(found.Spec, wantVpaSpec) {
-			found.Spec = wantVpaSpec
-			if err := r.Update(ctx, found); err != nil {
+		if !reflect.DeepEqual(foundVPA.Spec, wantVpaSpec) {
+			foundVPA.Spec = wantVpaSpec
+			if err := r.Update(ctx, foundVPA); err != nil {
 				return ctrl.Result{}, err
 			}
 			obj.Status.VPALastUpdateTime = metav1.NewTime(time.Now().In(time.UTC))
