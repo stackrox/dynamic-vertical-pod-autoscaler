@@ -33,7 +33,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	mydomainv1alpha1 "github.com/stackrox/dynamic-vertical-pod-autoscaler/api/v1alpha1"
+	"github.com/stackrox/dynamic-vertical-pod-autoscaler/api/v1alpha1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -76,7 +76,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	Expect(mydomainv1alpha1.AddToScheme(scheme.Scheme)).NotTo(HaveOccurred())
+	Expect(v1alpha1.AddToScheme(scheme.Scheme)).NotTo(HaveOccurred())
 	Expect(vpa.AddToScheme(scheme.Scheme)).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme

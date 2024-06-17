@@ -33,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	mydomainv1alpha1 "github.com/stackrox/dynamic-vertical-pod-autoscaler/api/v1alpha1"
+	"github.com/stackrox/dynamic-vertical-pod-autoscaler/api/v1alpha1"
 )
 
 // DynamicVerticalPodAutoscalerReconciler reconciles a DynamicVerticalPodAutoscaler object
@@ -61,7 +61,7 @@ func (r *DynamicVerticalPodAutoscalerReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, err
 	}
 
-	var obj mydomainv1alpha1.DynamicVerticalPodAutoscaler
+	var obj v1alpha1.DynamicVerticalPodAutoscaler
 	if err := r.Get(ctx, req.NamespacedName, &obj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -121,7 +121,7 @@ func (r *DynamicVerticalPodAutoscalerReconciler) Reconcile(ctx context.Context, 
 		"obj":    objUnstructured.Object,
 	}
 
-	var matchedCondition *mydomainv1alpha1.DynamicVerticalPodAutoscalerPolicy
+	var matchedCondition *v1alpha1.DynamicVerticalPodAutoscalerPolicy
 	for i, condition := range obj.Spec.Policies {
 
 		logger.V(5).Info("Checking condition",
@@ -218,7 +218,7 @@ func (r *DynamicVerticalPodAutoscalerReconciler) Reconcile(ctx context.Context, 
 	return defaultResult, nil
 }
 
-func makeVpaSpec(owner *mydomainv1alpha1.DynamicVerticalPodAutoscaler, wantSpec *mydomainv1alpha1.VpaSpec) vpa.VerticalPodAutoscalerSpec {
+func makeVpaSpec(owner *v1alpha1.DynamicVerticalPodAutoscaler, wantSpec *v1alpha1.VpaSpec) vpa.VerticalPodAutoscalerSpec {
 	return vpa.VerticalPodAutoscalerSpec{
 		TargetRef:      owner.Spec.TargetRef,
 		UpdatePolicy:   wantSpec.UpdatePolicy,
@@ -230,7 +230,7 @@ func makeVpaSpec(owner *mydomainv1alpha1.DynamicVerticalPodAutoscaler, wantSpec 
 // SetupWithManager sets up the controller with the Manager.
 func (r *DynamicVerticalPodAutoscalerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&mydomainv1alpha1.DynamicVerticalPodAutoscaler{}).
+		For(&v1alpha1.DynamicVerticalPodAutoscaler{}).
 		Owns(&vpa.VerticalPodAutoscaler{}).
 		Complete(r)
 }

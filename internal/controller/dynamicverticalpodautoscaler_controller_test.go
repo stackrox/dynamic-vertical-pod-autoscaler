@@ -30,7 +30,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	mydomainv1alpha1 "github.com/stackrox/dynamic-vertical-pod-autoscaler/api/v1alpha1"
+	"github.com/stackrox/dynamic-vertical-pod-autoscaler/api/v1alpha1"
 )
 
 var updateModeOff = vpa.UpdateModeOff
@@ -48,7 +48,7 @@ var _ = Describe("DynamicVerticalPodAutoscaler Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		obj := &mydomainv1alpha1.DynamicVerticalPodAutoscaler{}
+		obj := &v1alpha1.DynamicVerticalPodAutoscaler{}
 
 		BeforeEach(func() {
 			By("creating a deployment")
@@ -79,28 +79,28 @@ var _ = Describe("DynamicVerticalPodAutoscaler Controller", func() {
 			By("creating the custom resource for the Kind DynamicVerticalPodAutoscaler")
 			err := k8sClient.Get(ctx, typeNamespacedName, obj)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &mydomainv1alpha1.DynamicVerticalPodAutoscaler{
+				resource := &v1alpha1.DynamicVerticalPodAutoscaler{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					Spec: mydomainv1alpha1.DynamicVerticalPodAutoscalerSpec{
+					Spec: v1alpha1.DynamicVerticalPodAutoscalerSpec{
 						TargetRef: &autoscaling.CrossVersionObjectReference{
 							Kind:       "Deployment",
 							Name:       resourceName,
 							APIVersion: "apps/v1",
 						},
-						Policies: []mydomainv1alpha1.DynamicVerticalPodAutoscalerPolicy{
+						Policies: []v1alpha1.DynamicVerticalPodAutoscalerPolicy{
 							{
 								Condition: "false",
-								VpaSpec: mydomainv1alpha1.VpaSpec{
+								VpaSpec: v1alpha1.VpaSpec{
 									UpdatePolicy: &vpa.PodUpdatePolicy{
 										UpdateMode: &updateModeRecreate,
 									},
 								},
 							}, {
 								Condition: "true",
-								VpaSpec: mydomainv1alpha1.VpaSpec{
+								VpaSpec: v1alpha1.VpaSpec{
 									UpdatePolicy: &vpa.PodUpdatePolicy{
 										UpdateMode: &updateModeOff,
 									},
@@ -116,7 +116,7 @@ var _ = Describe("DynamicVerticalPodAutoscaler Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &mydomainv1alpha1.DynamicVerticalPodAutoscaler{}
+			resource := &v1alpha1.DynamicVerticalPodAutoscaler{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
@@ -145,7 +145,7 @@ var _ = Describe("DynamicVerticalPodAutoscaler Controller", func() {
 			Expect(vpaResource.Spec.UpdatePolicy.UpdateMode).To(Equal(&updateModeOff))
 
 			By("Updating the status of the DynamicVerticalPodAutoscaler")
-			updatedResource := &mydomainv1alpha1.DynamicVerticalPodAutoscaler{}
+			updatedResource := &v1alpha1.DynamicVerticalPodAutoscaler{}
 			err = k8sClient.Get(ctx, typeNamespacedName, updatedResource)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updatedResource.Status.VPALastUpdateTime).NotTo(Equal(0))

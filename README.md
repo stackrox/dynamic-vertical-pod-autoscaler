@@ -1,8 +1,11 @@
 # dynamic-vertical-pod-autoscaler
-// TODO(user): Add simple overview of use/purpose
+
+Use dynamic expressions to manage VerticalPodAutoscalers
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+
+This project is a Kubernetes operator that manages VerticalPodAutoscalers using dynamic expressions.
+
 
 ## Getting Started
 
