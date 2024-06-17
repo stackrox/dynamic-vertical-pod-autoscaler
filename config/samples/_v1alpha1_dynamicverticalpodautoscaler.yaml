@@ -54,12 +54,12 @@ spec:
     #   vpa     The VerticalPodAutoscaler object. May be nil if the VPA does not exist yet on the first evaluation.
 
     # Example
-    # Skip if the VPA when the last update is less than 5seconds ago.
+    # Skip if the VPA when the last update is less than 5 minutes ago.
     # Can help in preventing flapping.
     - condition: |      
         obj.status.vpaLastUpdateTime == nil 
           ? false 
-          : now() - date(obj.status.vpaLastUpdateTime) < duration("5s")
+          : now() - date(obj.status.vpaLastUpdateTime) < duration("5m")
       skip: true
 
     # Disable the VPA when the target has a specific annotation.
@@ -69,26 +69,20 @@ spec:
         updatePolicy:
           updateMode: "Off"
 
-    # Disable the VPA if the target has not been running for at least 2 minutes.
+    # Disable the VPA if the target has not been running for at least 2 hours
     # Can be useful to let the VPA learn the target's behavior before starting to apply recommendations.
+    # This will help the VPA fill the histogram with enough data to make accurate recommendations.
+    # (by lowering the confidence multiplier)
     - condition: |
-        now() - date(target.metadata.creationTimestamp) < duration("30m")
+        now() - date(target.metadata.creationTimestamp) < duration("2h")
       vpaSpec:
         updatePolicy:
           updateMode: "Off"
 
-    # Disable the VPA if the target has not been running for at least 2 minutes.
-    # Can be useful to let the VPA learn the target's behavior before starting to apply recommendations.
-    - condition: |      
-        now() - date(target.metadata.creationTimestamp) < duration("30m")
-      vpaSpec:
-        updatePolicy:
-          other: ["TargetAboveLimits"]
-
-    # Disable the VPA when the minute is even.
-    # This is useless, but could be useful to change the VPA config based on the day of the week or during nighttime, etc.
+    # Only enable the VPA on Sundays.
+    # This can be useful to not apply updates during business hours, etc.
     - condition: |
-        now().Minute() % 2 == 0
+        now().WeekDay() != 0
       vpaSpec:
         updatePolicy:
           updateMode: "Off"
