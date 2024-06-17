@@ -42,6 +42,7 @@ type DynamicVerticalPodAutoscalerReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+// defaultResult sets the default RequeueAfter.
 var defaultResult = ctrl.Result{Requeue: true, RequeueAfter: time.Second * 10}
 
 //+kubebuilder:rbac:groups=autoscaling.stackrox.io,resources=dynamicverticalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
@@ -66,6 +67,7 @@ func (r *DynamicVerticalPodAutoscalerReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// Sanity checks
 	if obj.Spec.TargetRef == nil {
 		return ctrl.Result{}, errors.New("targetRef is required")
 	}
@@ -82,59 +84,38 @@ func (r *DynamicVerticalPodAutoscalerReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, errors.New("conditions is required")
 	}
 
-	targetGroupVersion, err := schema.ParseGroupVersion(obj.Spec.TargetRef.APIVersion)
-	if err != nil {
+	vpaTarget, err := r.getVPATarget(ctx, obj)
+	if client.IgnoreNotFound(err) != nil {
 		return ctrl.Result{}, err
 	}
-	targetGvk := targetGroupVersion.WithKind(obj.Spec.TargetRef.Kind)
 
-	var target = unstructured.Unstructured{}
-	target.SetNamespace(obj.Namespace)
-	target.SetGroupVersionKind(targetGvk)
-	target.SetName(obj.Spec.TargetRef.Name)
-	if err := r.Get(ctx, client.ObjectKeyFromObject(&target), &target); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-
-	var existing = &vpa.VerticalPodAutoscaler{}
-	if err := r.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, existing); err != nil {
+	var existingVpa = &vpa.VerticalPodAutoscaler{}
+	if err := r.Get(ctx, client.ObjectKey{Name: obj.Name, Namespace: obj.Namespace}, existingVpa); err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			return ctrl.Result{}, err
 		}
 	}
 
-	var objUnstructured = &unstructured.Unstructured{}
-	if err := r.Scheme.Convert(&obj, objUnstructured, nil); err != nil {
+	env, err := r.getProgramEnv(obj, existingVpa, vpaTarget)
+	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	var vpaUnstructured = &unstructured.Unstructured{}
-	if existing != nil {
-		if err := r.Scheme.Convert(existing, vpaUnstructured, nil); err != nil {
-			return ctrl.Result{}, err
-		}
-	}
+	var matchedPolicy *v1alpha1.DynamicVerticalPodAutoscalerPolicy
+	for i, policy := range obj.Spec.Policies {
 
-	env := map[string]interface{}{
-		"target": target.Object,
-		"vpa":    vpaUnstructured.Object,
-		"obj":    objUnstructured.Object,
-	}
-
-	var matchedCondition *v1alpha1.DynamicVerticalPodAutoscalerPolicy
-	for i, condition := range obj.Spec.Policies {
-
-		logger.V(5).Info("Checking condition",
-			"condition", condition.Condition,
+		logger.V(5).Info("Checking policy",
+			"condition", policy.Condition,
 			"index", i,
 		)
 
-		if len(condition.Condition) == 0 {
-			matchedCondition = &condition
+		if len(policy.Condition) == 0 {
+			// When condition is empty, this evaluates to true
+			matchedPolicy = &policy
 			break
 		}
 
-		program, err := expr.Compile(condition.Condition, expr.Env(env))
+		program, err := expr.Compile(policy.Condition, expr.Env(env))
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -145,25 +126,25 @@ func (r *DynamicVerticalPodAutoscalerReconciler) Reconcile(ctx context.Context, 
 		}
 
 		if output.(bool) {
-			matchedCondition = &condition
+			matchedPolicy = &policy
 			break
 		}
 	}
 
-	if matchedCondition == nil {
-		return ctrl.Result{}, errors.New("no matching condition found")
+	if matchedPolicy == nil {
+		return ctrl.Result{}, errors.New("no matching policy found")
 	}
 
-	if matchedCondition.Skip {
+	if matchedPolicy.Skip {
 		logger.V(5).Info("Skipping reconciliation")
 		return defaultResult, nil
 	}
 
 	logger.V(5).Info("Reconciling",
-		"condition", matchedCondition.Condition,
+		"policy", matchedPolicy.Condition,
 	)
 
-	wantVpaSpec := makeVpaSpec(&obj, &matchedCondition.VpaSpec)
+	wantVpaSpec := makeVpaSpec(&obj, &matchedPolicy.VpaSpec)
 
 	// Get or create the VPA object
 	found := &vpa.VerticalPodAutoscaler{}
@@ -205,7 +186,6 @@ func (r *DynamicVerticalPodAutoscalerReconciler) Reconcile(ctx context.Context, 
 			if err := r.Update(ctx, found); err != nil {
 				return ctrl.Result{}, err
 			}
-
 			obj.Status.VPALastUpdateTime = metav1.NewTime(time.Now().In(time.UTC))
 			if err := r.Status().Update(ctx, &obj); err != nil {
 				return ctrl.Result{}, err
@@ -218,6 +198,34 @@ func (r *DynamicVerticalPodAutoscalerReconciler) Reconcile(ctx context.Context, 
 	return defaultResult, nil
 }
 
+// getProgramEnv returns the environment available in the expr-lang condition
+func (r *DynamicVerticalPodAutoscalerReconciler) getProgramEnv(
+	obj v1alpha1.DynamicVerticalPodAutoscaler,
+	existingVpa *vpa.VerticalPodAutoscaler,
+	vpaTarget *unstructured.Unstructured,
+) (map[string]interface{}, error) {
+
+	var objUnstructured = &unstructured.Unstructured{}
+	if err := r.Scheme.Convert(&obj, objUnstructured, nil); err != nil {
+		return nil, err
+	}
+
+	var vpaUnstructured = &unstructured.Unstructured{}
+	if existingVpa != nil {
+		if err := r.Scheme.Convert(existingVpa, vpaUnstructured, nil); err != nil {
+			return nil, err
+		}
+	}
+
+	env := map[string]interface{}{
+		"target": vpaTarget.Object,
+		"vpa":    vpaUnstructured.Object,
+		"obj":    objUnstructured.Object,
+	}
+
+	return env, nil
+}
+
 func makeVpaSpec(owner *v1alpha1.DynamicVerticalPodAutoscaler, wantSpec *v1alpha1.VpaSpec) vpa.VerticalPodAutoscalerSpec {
 	return vpa.VerticalPodAutoscalerSpec{
 		TargetRef:      owner.Spec.TargetRef,
@@ -225,6 +233,24 @@ func makeVpaSpec(owner *v1alpha1.DynamicVerticalPodAutoscaler, wantSpec *v1alpha
 		ResourcePolicy: wantSpec.ResourcePolicy,
 		Recommenders:   wantSpec.Recommenders,
 	}
+}
+
+// findVPATarget finds the VPA target object. Result may be nil
+func (r *DynamicVerticalPodAutoscalerReconciler) getVPATarget(ctx context.Context, obj v1alpha1.DynamicVerticalPodAutoscaler) (*unstructured.Unstructured, error) {
+	targetGV, err := schema.ParseGroupVersion(obj.Spec.TargetRef.APIVersion)
+	if err != nil {
+		return nil, err
+	}
+	targetGvk := targetGV.WithKind(obj.Spec.TargetRef.Kind)
+
+	var target = unstructured.Unstructured{}
+	target.SetNamespace(obj.Namespace)
+	target.SetGroupVersionKind(targetGvk)
+	target.SetName(obj.Spec.TargetRef.Name)
+	if err := r.Get(ctx, client.ObjectKeyFromObject(&target), &target); err != nil {
+		return nil, err
+	}
+	return &target, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
