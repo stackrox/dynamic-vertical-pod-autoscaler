@@ -1,6 +1,6 @@
 # dynamic-vertical-pod-autoscaler
 
-Use dynamic expressions to manage VerticalPodAutoscalers
+Use dynamic expressions to manage [VerticalPodAutoscalers](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler)
 
 ## Description
 
