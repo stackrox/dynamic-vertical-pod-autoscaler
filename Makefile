@@ -310,3 +310,4 @@ catalog-push: ## Push a catalog image.
 .PHONY: install-vpa-operator
 install-vpa-operator: kustomize ## Install VPA Operator CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build https://github.com/kubernetes/autoscaler/vertical-pod-autoscaler/deploy/ | $(KUBECTL) apply -f -
+	./hack/gencerts.sh
