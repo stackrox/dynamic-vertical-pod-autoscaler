@@ -1,0 +1,103 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  annotations:
+  # vpa-disabled: "true"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: docker.io/library/nginx:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+            limits:
+              cpu: 200m
+              memory: 200Mi
+---
+apiVersion: autoscaling.stackrox.io/v1alpha1
+kind: DynamicVerticalPodAutoscaler
+metadata:
+  labels:
+    app.kubernetes.io/name: dynamicverticalpodautoscaler
+    app.kubernetes.io/instance: dynamicverticalpodautoscaler-sample
+    app.kubernetes.io/part-of: dynamic-vertical-pod-autoscaler
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: dynamic-vertical-pod-autoscaler
+  name: dynamicverticalpodautoscaler-sample
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nginx
+  policies:
+
+    # The conditions are evaluated using https://expr-lang.org/
+    # See https://expr-lang.org/docs/language-definition for the language definition.
+    # The environment contains the following variables:
+    #   target  The target object (Deployment, StatefulSet, etc.). It is obtained using an unstructured.Unstructured
+    #           so it is represented as a map[string]interface{}.
+    #   obj     The DynamicVerticalPodAutoscaler object.
+    #   vpa     The VerticalPodAutoscaler object. May be nil if the VPA does not exist yet on the first evaluation.
+
+    # Example
+    # Skip if the VPA when the last update is less than 5seconds ago.
+    # Can help in preventing flapping.
+    - condition: |      
+        obj.status.vpaLastUpdateTime == nil 
+          ? false 
+          : now() - date(obj.status.vpaLastUpdateTime) < duration("5s")
+      skip: true
+
+    # Disable the VPA when the target has a specific annotation.
+    - condition: |
+        target.metadata.annotations?.["vpa-disabled"] == "true" ?? false
+      vpaSpec:
+        updatePolicy:
+          updateMode: "Off"
+
+    # Disable the VPA if the target has not been running for at least 2 minutes.
+    # Can be useful to let the VPA learn the target's behavior before starting to apply recommendations.
+    - condition: |
+        now() - date(target.metadata.creationTimestamp) < duration("30m")
+      vpaSpec:
+        updatePolicy:
+          updateMode: "Off"
+
+    # Disable the VPA if the target has not been running for at least 2 minutes.
+    # Can be useful to let the VPA learn the target's behavior before starting to apply recommendations.
+    - condition: |      
+        now() - date(target.metadata.creationTimestamp) < duration("30m")
+      vpaSpec:
+        updatePolicy:
+          other: ["TargetAboveLimits"]
+
+    # Disable the VPA when the minute is even.
+    # This is useless, but could be useful to change the VPA config based on the day of the week or during nighttime, etc.
+    - condition: |
+        now().Minute() % 2 == 0
+      vpaSpec:
+        updatePolicy:
+          updateMode: "Off"
+
+    # An empty expression evaluates to true.
+    # Useful for setting the default VPA configuration.
+    - vpaSpec:
+        updatePolicy:
+          updateMode: "Auto"
+
+
+---
